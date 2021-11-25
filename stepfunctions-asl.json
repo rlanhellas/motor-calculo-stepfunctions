@@ -1,0 +1,136 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "carrega_dados",
+  "States": {
+    "carrega_dados": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": {
+        "TableName": "dadosmotor",
+        "Key": {
+          "segmento_servico_utilizador": {
+            "S.$": "States.Format(States.Format('{}@{}@{}', $.segmento,$.servico,$.utilizador))"
+          }
+        }
+      },
+      "Next": "encontrou_dados_db",
+      "ResultPath": "$.dynamoResult",
+      "ResultSelector": {
+        "item.$": "$.Item"
+      }
+    },
+    "encontrou_dados_db": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.dynamoResult.item.catalogo",
+          "IsPresent": true,
+          "Next": "retorna_tipo_calculo"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "retorna_tipo_calculo": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "arn:aws:lambda:sa-east-1:584431903669:function:retorna_tipo_calculo:$LATEST"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "tipo_calculo",
+      "ResultSelector": {
+        "tipo.$": "$.Payload"
+      },
+      "ResultPath": "$.resultadoTipoCalculo"
+    },
+    "tipo_calculo": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.resultadoTipoCalculo.tipo",
+          "StringEquals": "AVULSO",
+          "Next": "calcula_taxa"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "calcula_taxa": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "arn:aws:lambda:sa-east-1:584431903669:function:calcula_taxa:$LATEST"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultSelector": {
+        "valorTaxa.$": "$.Payload"
+      },
+      "ResultPath": "$.resultadoCalculoTaxa",
+      "Next": "existe_oferta"
+    },
+    "existe_oferta": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.dynamoResult.item.oferta",
+          "IsPresent": true,
+          "Next": "calcula_desconto"
+        }
+      ],
+      "Default": "retorna_taxa_calculada_sem_desconto"
+    },
+    "calcula_desconto": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "arn:aws:lambda:sa-east-1:584431903669:function:calcula_desconto:$LATEST"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    },
+    "retorna_taxa_calculada_sem_desconto": {
+      "Type": "Pass",
+      "End": true,
+      "OutputPath": "$.resultadoCalculoTaxa"
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  }
+}
