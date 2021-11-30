@@ -4,8 +4,11 @@ def lambda_handler(event, context):
     print('Verifica o tipo do calculo: AVULSO ou PLANO.')
     print(event)
     try:
-        event['dynamoResult']['item']['catalogo']['M']['pacote']
+        pacote = event['dynamoResult']['item']['catalogo']['M']['pacote']
         event['dynamoResult']['item']['catalogo']['M']['grupo']
-        return "PLANO"
+        if (pacote['S'] == 'ISENTO'):
+            return "ISENTO"
+        else:
+          return "PLANO"
     except KeyError:
         return "AVULSO"    
